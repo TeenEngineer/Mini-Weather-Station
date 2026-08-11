@@ -1,0 +1,1 @@
+A mini weather and temperature station displaying outdoors and indoors temperature, and barometric pressure, along with an estimated altitude above the sea level. All working on a Tenstar Robot TS-ESP32-S3
