@@ -11,6 +11,20 @@
 #include <WiFiManager.h>
 #include "time.h"
 
+// ==================== SETTINGS ====================
+String openWeatherMapApiKey = "YOUR_OPENWEATHER_API_KEY"; 
+String city                 = "None"; // Talk to your AI assistant to change it to your location
+String countryCode          = "None"; // Talk to your AI assistant to change it to your location
+
+// TIMEZONE SETTINGS
+const char* ntpServer       = "pool.ntp.org";
+const long  gmtOffset_sec   = 0; // GMT+0 Timezone set, talk with your AI assistant to change it to your location's timezone
+const int   daylightOffset_sec = 0; // GMT+0 Timezone set, talk with your AI assistant to change it to your location's timezone
+
+// ==================================================
+
+
+
 // Extra 16-bit RGB565 Colors
 #define ST77XX_GRAY     0x8410
 #define ST77XX_DARKGRAY 0x4208
@@ -30,19 +44,13 @@
 #define SCL_PIN         41           // BMP280 SCL
 #define BAT_ADC_PIN      4           // Battery Sense Pin
 
-// ==================== SETTINGS ====================
-String openWeatherMapApiKey = "0e352cd48dca08dc9f3bc11f5fe08bd2"; 
-String city                 = "Tashkent";
-String countryCode          = "UZ";
-
 #define TEMP_OFFSET_C   15.5          
-
-// Timezone: Philadelphia / US Eastern Time (Automatic DST)
-const char* ntpServer = "pool.ntp.org";
-const char* TZ_INFO   = "EST5EDT,M3.2.0,M11.1.0";
 
 // Auto-sleep timeout (10 minutes = 600,000 ms)
 const unsigned long AUTO_SLEEP_TIMEOUT_MS = 600000; 
+
+// Weather fetch interval (10 minutes)
+const unsigned long WEATHER_FETCH_INTERVAL = 600000; 
 
 // ==================== OBJECTS ====================
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
@@ -53,17 +61,18 @@ WiFiManager wm;
 enum DisplayMode { SCREEN_HOME, SCREEN_SETUP };
 DisplayMode currentScreen = SCREEN_HOME;
 
-bool bmpConnected     = false;
-bool isHotspotActive  = false;
-float outsideTemp     = 0.0;
-float bmpTemp         = 0.0;
-float pressurehPa     = 0.0;
-float altitudeMeters  = 0.0;
-String currentTimeStr = "--:--";
+bool bmpConnected       = false;
+bool isHotspotActive    = false;
+float outsideTemp       = 0.0;
+float bmpTemp           = 0.0;
+float pressurehPa       = 0.0;
+float altitudeMeters    = 0.0;
+String currentTimeStr   = "--:--";
 
 // Timers and touch tracking
 unsigned long touchStartTime    = 0;
 unsigned long lastActivityTime  = 0;  // Tracks inactivity for auto-sleep
+unsigned long lastWeatherFetch  = 0;  // Tracks weather API interval
 bool isTouching                 = false;
 const unsigned long HOLD_THRESHOLD_MS = 1500; 
 
@@ -87,9 +96,10 @@ int readBatteryPercentage() {
   return constrain(pct, 0, 100);
 }
 
-void updateTimeAndBrightness() {
+// NON-BLOCKING Time Update (max 10ms timeout)
+bool updateTimeAndBrightness() {
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
+  if (getLocalTime(&timeinfo, 10)) { // 10ms max wait ensures zero screen lag
     char timeBuff[6];
     strftime(timeBuff, sizeof(timeBuff), "%H:%M", &timeinfo);
     currentTimeStr = String(timeBuff);
@@ -100,7 +110,9 @@ void updateTimeAndBrightness() {
     } else {
       setBacklightBrightness(200); 
     }
+    return true;
   }
+  return false;
 }
 
 void fetchOutsideWeather() {
@@ -108,7 +120,7 @@ void fetchOutsideWeather() {
     HTTPClient http;
     String url = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&units=metric&appid=" + openWeatherMapApiKey;
     
-    http.setTimeout(1500); 
+    http.setTimeout(800); // Tight 800ms timeout so touch never feels frozen
     http.begin(url);
     if (http.GET() == HTTP_CODE_OK) {
       DynamicJsonDocument doc(1024);
@@ -121,7 +133,7 @@ void fetchOutsideWeather() {
 
 void readBMP280() {
   if (bmpConnected) {
-    bmp.takeForcedMeasurement(); // Take a quick single reading, then sleep
+    bmp.takeForcedMeasurement(); // Fast single reading
     bmpTemp = bmp.readTemperature() - TEMP_OFFSET_C;
     pressurehPa = bmp.readPressure() / 100.0F;
     altitudeMeters = bmp.readAltitude(1013.25);
@@ -138,7 +150,7 @@ void updateHomeScreenValues() {
   // 1. CENTER CLOCK (Text Size 5)
   tft.setTextSize(5);
   tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-  tft.setCursor(45, 48);
+  tft.setCursor(45, 48); 
   tft.printf("%-5s", currentTimeStr.c_str());
 
   tft.setTextSize(2);
@@ -172,9 +184,18 @@ void updateHomeScreenValues() {
     tft.printf("%.0fhPa ", pressurehPa);
   }
 
-  // 5. BOTTOM-RIGHT: Battery Percentage
+  // 5. BOTTOM-RIGHT: Altitude
   tft.setCursor(140, 115);
   tft.setTextColor(ST77XX_MAGENTA, ST77XX_BLACK);
+  if (!bmpConnected) {
+    tft.print("N/A   ");
+  } else {
+    tft.printf("ALT:%.0fm", altitudeMeters);
+  }
+
+  // 6. BATTERY PERCENTAGE
+  tft.setCursor(78, 26);
+  tft.setTextColor(ST77XX_GRAY, ST77XX_BLACK);
   tft.printf("BAT:%d%% ", readBatteryPercentage());
 }
 
@@ -256,9 +277,8 @@ void startSetupPortal() {
 
 void setup() {
   Serial.begin(115200);
-  delay(300);
 
-  // Init RGB LED (OFF by default)
+  // 1. Hardware Init
   rgbLed.begin();
   rgbLed.setBrightness(128); 
   setLedColor(0, 0, 0); 
@@ -267,10 +287,11 @@ void setup() {
   pinMode(TFT_BL, OUTPUT);
   setBacklightBrightness(200); 
 
+  // 2. Initialize Display
   tft.init(135, 240);
   tft.setRotation(1); 
   
-  // BMP280 Sensor Check (Forced Mode to prevent internal heat)
+  // 3. BMP280 Sensor Check
   Wire.begin(SDA_PIN, SCL_PIN);
   bmpConnected = bmp.begin(0x76) || bmp.begin(0x77);
 
@@ -282,50 +303,77 @@ void setup() {
                     Adafruit_BMP280::STANDBY_MS_4000);
   }
 
-  // WiFi Connection
-  WiFi.mode(WIFI_STA);
-  wm.setConnectTimeout(10);
-  wm.autoConnect("WeatherStation-AP");
+  // 4. DRAW SCREEN IMMEDIATELY (Instant Boot)
+  readBMP280();
+  initHomeScreenLayout();
+  updateHomeScreenValues(); 
 
-  if (WiFi.status() == WL_CONNECTED) {
-    configTzTime(TZ_INFO, ntpServer); // Philadelphia timezone
+  // 5. Connect Wi-Fi in background with short 2s timeout
+  WiFi.persistent(true);
+  WiFi.mode(WIFI_STA);
+  wm.setEnableConfigPortal(false); 
+  wm.setConnectTimeout(2);         
+
+  if (wm.autoConnect("WeatherStation-AP")) {
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // Start NTP sync
+    fetchOutsideWeather();
+    lastWeatherFetch = millis();
   }
 
-  initHomeScreenLayout();
-  lastActivityTime = millis(); // Start auto-sleep countdown
+  lastActivityTime = millis(); 
 }
 
 void loop() {
-  static unsigned long lastUpdate = 0;
+  static unsigned long lastSensorUpdate = 0;
+  static unsigned long lastTimeCheck   = 0;
+  unsigned long now = millis();
 
-  // Refresh readings every 5 seconds
-  if (millis() - lastUpdate > 5000 || lastUpdate == 0) {
-    lastUpdate = millis();
+  // 1. FAST TIME CHECK (Every 500ms, non-blocking)
+  // Shows time on screen the EXACT MILLISECOND NTP syncs!
+  if (now - lastTimeCheck >= 500) {
+    lastTimeCheck = now;
+    if (updateTimeAndBrightness() && currentScreen == SCREEN_HOME) {
+      tft.setTextSize(5);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setCursor(45, 48);
+      tft.printf("%-5s", currentTimeStr.c_str());
+    }
+  }
+
+  // 2. SENSOR & WEATHER REFRESH (Indoor every 5s, Outdoor every 10 min)
+  if (now - lastSensorUpdate >= 5000) {
+    lastSensorUpdate = now;
     readBMP280();
-    updateTimeAndBrightness();
-    fetchOutsideWeather();
+
+    // Fetch weather if 10 mins passed or never fetched
+    if (now - lastWeatherFetch >= WEATHER_FETCH_INTERVAL || lastWeatherFetch == 0) {
+      if (WiFi.status() == WL_CONNECTED) {
+        fetchOutsideWeather();
+        lastWeatherFetch = now;
+      }
+    }
 
     if (currentScreen == SCREEN_HOME) {
       updateHomeScreenValues();
     }
   }
 
-  // ================= AUTO-SLEEP CHECK =================
-  if (millis() - lastActivityTime >= AUTO_SLEEP_TIMEOUT_MS) {
+  // 3. AUTO-SLEEP CHECK
+  if (now - lastActivityTime >= AUTO_SLEEP_TIMEOUT_MS) {
     enterDeepSleep();
   }
 
-  // ================= TOUCH CONTROLS =================
+  // 4. TOUCH CONTROLS (Always responsive)
   bool rawTouch = (digitalRead(TOUCH_PIN) == HIGH);
 
   if (rawTouch && !isTouching) {
     isTouching = true;
-    touchStartTime = millis();
-    lastActivityTime = millis(); // Reset 10-min timer on touch
+    touchStartTime = now;
+    lastActivityTime = now; // Reset 10-min timer
   } 
   else if (rawTouch && isTouching) {
     // 1.5s Hold Check
-    if (millis() - touchStartTime >= HOLD_THRESHOLD_MS) {
+    if (now - touchStartTime >= HOLD_THRESHOLD_MS) {
       isTouching = false; 
       
       if (currentScreen == SCREEN_HOME) {
@@ -337,9 +385,9 @@ void loop() {
   } 
   else if (!rawTouch && isTouching) {
     // Touch Released
-    unsigned long pressDuration = millis() - touchStartTime;
+    unsigned long pressDuration = now - touchStartTime;
     isTouching = false;
-    lastActivityTime = millis(); // Reset 10-min timer on release
+    lastActivityTime = now; 
 
     // Short Tap (<1.5s): Toggle Screen Mode
     if (pressDuration >= 20 && pressDuration < HOLD_THRESHOLD_MS) {
