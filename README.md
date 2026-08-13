@@ -3,6 +3,7 @@ A mini weather and temperature station displaying outdoors and indoors temperatu
 ### Disclaimer: Used Gemini for code
 
 Here is a video showcase of the thing:
+
 https://github.com/user-attachments/assets/98cfebd6-e004-4a77-a924-2f23e415244a
 
 # Instructions on how to use
