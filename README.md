@@ -12,6 +12,8 @@ A mini weather and temperature station displaying outdoors and indoors temperatu
 | I/O | GPIO 5 |
 | GND | GND |
 
+Used a 1000mAh li-po battery with dimensions: 35x29x10mm
+
 Here is a video showcase of the thing:
 
 https://github.com/user-attachments/assets/98cfebd6-e004-4a77-a924-2f23e415244a
