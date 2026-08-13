@@ -58,23 +58,28 @@ Adafruit_BMP280 bmp;
 Adafruit_NeoPixel rgbLed(1, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
 WiFiManager wm;
 
-enum DisplayMode { SCREEN_HOME, SCREEN_SETUP };
+// 3-Screen Navigation Cycle
+enum DisplayMode { SCREEN_HOME,
+                   SCREEN_SETUP,
+                   SCREEN_FLASHLIGHT };
 DisplayMode currentScreen = SCREEN_HOME;
 
-bool bmpConnected       = false;
-bool isHotspotActive    = false;
-float outsideTemp       = 0.0;
-float bmpTemp           = 0.0;
-float pressurehPa       = 0.0;
-float altitudeMeters    = 0.0;
-String currentTimeStr   = "--:--";
+bool flashlightOn = false;
+
+bool bmpConnected = false;
+bool isHotspotActive = false;
+float outsideTemp = 0.0;
+float bmpTemp = 0.0;
+float pressurehPa = 0.0;
+float altitudeMeters = 0.0;
+String currentTimeStr = "--:--";
 
 // Timers and touch tracking
-unsigned long touchStartTime    = 0;
-unsigned long lastActivityTime  = 0;  // Tracks inactivity for auto-sleep
-unsigned long lastWeatherFetch  = 0;  // Tracks weather API interval
-bool isTouching                 = false;
-const unsigned long HOLD_THRESHOLD_MS = 1500; 
+unsigned long touchStartTime = 0;
+unsigned long lastActivityTime = 0;  // Tracks inactivity for auto-sleep
+unsigned long lastWeatherFetch = 0;  // Tracks weather API interval
+bool isTouching = false;
+const unsigned long HOLD_THRESHOLD_MS = 1500;
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -89,7 +94,7 @@ void setBacklightBrightness(uint8_t brightness) {
 
 int readBatteryPercentage() {
   uint32_t raw = analogRead(BAT_ADC_PIN);
-  float voltage = (raw / 4095.0) * 3.3 * 2.0; 
+  float voltage = (raw / 4095.0) * 3.3 * 2.0;
   if (voltage >= 4.2) return 100;
   if (voltage <= 3.3) return 0;
   int pct = (int)((voltage - 3.3) / (4.2 - 3.3) * 100.0);
@@ -98,16 +103,16 @@ int readBatteryPercentage() {
 
 bool updateTimeAndBrightness() {
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo, 100)) { 
+  if (getLocalTime(&timeinfo, 100)) {
     char timeBuff[6];
     strftime(timeBuff, sizeof(timeBuff), "%H:%M", &timeinfo);
     currentTimeStr = String(timeBuff);
 
     // Nighttime auto-dimming (8 PM to 6 AM)
     if (timeinfo.tm_hour >= 20 || timeinfo.tm_hour < 6) {
-      setBacklightBrightness(30);  
+      setBacklightBrightness(30);
     } else {
-      setBacklightBrightness(200); 
+      setBacklightBrightness(200);
     }
     return true;
   }
@@ -118,7 +123,7 @@ void fetchOutsideWeather() {
   if (WiFi.status() == WL_CONNECTED && openWeatherMapApiKey != "YOUR_OPENWEATHER_API_KEY") {
     HTTPClient http;
     String url = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&units=metric&appid=" + openWeatherMapApiKey;
-    
+
     http.setTimeout(800);
     http.begin(url);
     if (http.GET() == HTTP_CODE_OK) {
@@ -132,7 +137,7 @@ void fetchOutsideWeather() {
 
 void readBMP280() {
   if (bmpConnected) {
-    bmp.takeForcedMeasurement(); 
+    bmp.takeForcedMeasurement();
     bmpTemp = bmp.readTemperature() - TEMP_OFFSET_C;
     pressurehPa = bmp.readPressure() / 100.0F;
     altitudeMeters = bmp.readAltitude(1013.25);
@@ -149,7 +154,7 @@ void updateHomeScreenValues() {
   // 1. CENTER CLOCK (Text Size 5)
   tft.setTextSize(5);
   tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-  tft.setCursor(45, 48); 
+  tft.setCursor(45, 48);
   tft.printf("%-5s", currentTimeStr.c_str());
 
   tft.setTextSize(2);
@@ -219,7 +224,7 @@ void drawSetupScreen() {
     tft.println("\n2. Open browser at:");
     tft.setTextColor(ST77XX_YELLOW, ST77XX_NAVY);
     tft.println("   IP:   192.168.4.1");
-    
+
     tft.setTextColor(ST77XX_CYAN, ST77XX_NAVY);
     tft.setCursor(10, 115);
     tft.println("[TAP TOUCH] -> Exit Hotspot");
@@ -240,21 +245,66 @@ void drawSetupScreen() {
   }
 }
 
+void drawFlashlightScreen() {
+  tft.fillScreen(ST77XX_BLACK);
+
+  // 1. Center Title: FLASHLIGHT
+  tft.setTextSize(3);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+  tft.setCursor(30, 30);
+  tft.print("FLASHLIGHT");
+
+  // 2. Status Text: ON / OFF
+  if (flashlightOn) {
+    tft.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
+    tft.setCursor(102, 75);
+    tft.print("ON ");
+  } else {
+    tft.setTextColor(ST77XX_RED, ST77XX_BLACK);
+    tft.setCursor(93, 75);
+    tft.print("OFF");
+  }
+
+  // 3. Instruction Hint
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_GRAY, ST77XX_BLACK);
+  tft.setCursor(25, 115);
+  tft.print("[HOLD TOUCH] -> Power ON/OFF");
+}
+
+void toggleFlashlight() {
+  flashlightOn = !flashlightOn;
+
+  if (flashlightOn) {
+    rgbLed.setBrightness(204);                             // 80% Brightness
+    rgbLed.setPixelColor(0, rgbLed.Color(255, 255, 255));  // Bright White
+    rgbLed.show();
+  } else {
+    setLedColor(0, 0, 0);       // Turn OFF
+    rgbLed.setBrightness(128);  // Reset to default
+  }
+
+  // Refresh display immediately if currently on Flashlight menu
+  if (currentScreen == SCREEN_FLASHLIGHT) {
+    drawFlashlightScreen();
+  }
+}
+
 // ==================== DEEP SLEEP & PORTAL ====================
 
 void enterDeepSleep() {
-  setLedColor(255, 0, 0); // Flash Red on sleep
+  setLedColor(255, 0, 0);  // Flash Red on sleep
   setBacklightBrightness(0);
   tft.fillScreen(ST77XX_BLACK);
 
   // Wait until finger is lifted off touch pad
   unsigned long timeout = millis();
-  while (digitalRead(TOUCH_PIN) == HIGH) { 
-    delay(10); 
+  while (digitalRead(TOUCH_PIN) == HIGH) {
+    delay(10);
     if (millis() - timeout > 3000) break;
   }
 
-  setLedColor(0, 0, 0); 
+  setLedColor(0, 0, 0);
   delay(50);
 
   esp_sleep_enable_ext0_wakeup((gpio_num_t)TOUCH_PIN, 1);
@@ -263,10 +313,10 @@ void enterDeepSleep() {
 
 void startSetupPortal() {
   isHotspotActive = true;
-  setLedColor(0, 0, 255); // Blue LED during AP Hotspot mode
-  
-  wm.setConfigPortalTimeout(180); 
-  wm.startConfigPortal("WeatherStation-AP"); // Starts non-blocking hotspot
+  setLedColor(0, 0, 255);  // Blue LED during AP Hotspot mode
+
+  wm.setConfigPortalTimeout(180);
+  wm.startConfigPortal("WeatherStation-AP");  // Starts non-blocking hotspot
   drawSetupScreen();
 }
 
@@ -289,17 +339,17 @@ void setup() {
 
   // 1. Hardware Init
   rgbLed.begin();
-  rgbLed.setBrightness(128); 
-  setLedColor(0, 0, 0); 
+  rgbLed.setBrightness(128);
+  setLedColor(0, 0, 0);
 
-  pinMode(TOUCH_PIN, INPUT); 
+  pinMode(TOUCH_PIN, INPUT);
   pinMode(TFT_BL, OUTPUT);
-  setBacklightBrightness(200); 
+  setBacklightBrightness(200);
 
   // 2. Initialize Display
   tft.init(135, 240);
-  tft.setRotation(1); 
-  
+  tft.setRotation(1);
+
   // 3. SET TIMEZONE IMMEDIATELY (Fixes UTC+0 after Deep Sleep wakeup)
   configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.google.com", "time.nist.gov");
 
@@ -319,21 +369,21 @@ void setup() {
   readBMP280();
   updateTimeAndBrightness();
   initHomeScreenLayout();
-  updateHomeScreenValues(); 
+  updateHomeScreenValues();
 
   // 6. Connect Wi-Fi (Non-blocking portal mode)
   WiFi.persistent(true);
   WiFi.mode(WIFI_STA);
-  wm.setConfigPortalBlocking(false); 
-  wm.setEnableConfigPortal(false); 
-  wm.setConnectTimeout(5); 
+  wm.setConfigPortalBlocking(false);
+  wm.setEnableConfigPortal(false);
+  wm.setConnectTimeout(5);
 
   if (wm.autoConnect("WeatherStation-AP")) {
     fetchOutsideWeather();
     lastWeatherFetch = millis();
   }
 
-  lastActivityTime = millis(); 
+  lastActivityTime = millis();
 }
 
 void loop() {
@@ -346,7 +396,7 @@ void loop() {
   }
 
   static unsigned long lastSensorUpdate = 0;
-  static unsigned long lastTimeCheck   = 0;
+  static unsigned long lastTimeCheck = 0;
   unsigned long now = millis();
 
   // 1. FAST TIME CHECK (Every 500ms, non-blocking)
@@ -382,44 +432,47 @@ void loop() {
     enterDeepSleep();
   }
 
-  // 4. TOUCH CONTROLS
+  // 4. скщзROLS
   bool rawTouch = (digitalRead(TOUCH_PIN) == HIGH);
 
   if (rawTouch && !isTouching) {
     isTouching = true;
     touchStartTime = now;
-    lastActivityTime = now; 
-  } 
-  else if (rawTouch && isTouching) {
+    lastActivityTime = now;
+  } else if (rawTouch && isTouching) {
     // 1.5s Hold Check
     if (now - touchStartTime >= HOLD_THRESHOLD_MS) {
-      isTouching = false; 
-      
+      isTouching = false;
+
       if (currentScreen == SCREEN_HOME) {
-        enterDeepSleep(); 
+        enterDeepSleep();
       } else if (currentScreen == SCREEN_SETUP) {
         if (isHotspotActive) {
-          stopSetupPortal(); // Exit Hotspot on Hold
+          stopSetupPortal();
         } else {
-          startSetupPortal(); // Start Hotspot on Hold
+          startSetupPortal();
         }
+      } else if (currentScreen == SCREEN_FLASHLIGHT) {
+        toggleFlashlight();  // HOLD TOGGLES LIGHT ON/OFF
       }
     }
-  } 
-  else if (!rawTouch && isTouching) {
+  } else if (!rawTouch && isTouching) {
     // Touch Released
     unsigned long pressDuration = now - touchStartTime;
     isTouching = false;
-    lastActivityTime = now; 
+    lastActivityTime = now;
 
-    // Short Tap (<1.5s)
+    // Short Tap (<1.5s): Cycle 1 -> 2 -> 3 -> 1
     if (pressDuration >= 20 && pressDuration < HOLD_THRESHOLD_MS) {
       if (isHotspotActive) {
-        stopSetupPortal(); // Tap immediately exits AP mode!
+        stopSetupPortal();
       } else if (currentScreen == SCREEN_HOME) {
         currentScreen = SCREEN_SETUP;
         drawSetupScreen();
       } else if (currentScreen == SCREEN_SETUP) {
+        currentScreen = SCREEN_FLASHLIGHT;
+        drawFlashlightScreen();
+      } else if (currentScreen == SCREEN_FLASHLIGHT) {
         currentScreen = SCREEN_HOME;
         initHomeScreenLayout();
         updateHomeScreenValues();
