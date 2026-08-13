@@ -16,7 +16,7 @@ There is also a clock in the center. You have to set the timezone offsets for yo
 There is a battery indicator on top of the clock, displays the battery charge percentage(may vary)
 And there are barometric pressure readings at the bottom left, displayed in hectopascals(readings are from BMP280). There is an estimated altitude too, at the bottom right(based on pressure readings)
 
-## AP setup
+## WiFi setup
 In this menu, you will see the connection status(Connected or Disconnected). If connected, you will see the SSID of the AP, the IP and Signal(formally RSSI) strength in dBm.
 If you want to connect to your Wi-Fi AP, you touch and hold the touch sensor, until the RGB light turns blue, and the screen displays instructions(Connect to "WeatherStation-AP", open "192.168.4.1" in your browser, and set things up there. Used "WiFiManager" library by tzapu). If you wish to exit the AP setup mode, you can either tap on the touch sensor again, or exit from the web portal itself.
 
