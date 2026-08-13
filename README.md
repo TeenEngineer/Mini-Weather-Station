@@ -2,18 +2,6 @@ A mini weather and temperature station displaying outdoors and indoors temperatu
 
 ### Disclaimer: Used Gemini for code
 
-## Circuit diagram
-<img width="750" height="492" alt="circuit diagram" src="https://github.com/user-attachments/assets/63e5edaf-abf1-4f25-bc62-36640391eb91" />
-
-## Pinouts
-| Touch sensor | ESP32-S3 |
-| --- | --- |
-| VCC | 3V |
-| I/O | GPIO 5 |
-| GND | GND |
-
-Used a 1000mAh li-po battery with dimensions: 35x29x10mm
-
 Here is a video showcase of the thing:
 
 https://github.com/user-attachments/assets/98cfebd6-e004-4a77-a924-2f23e415244a
@@ -35,3 +23,23 @@ If you want to connect to your Wi-Fi AP, you touch and hold the touch sensor, un
 Not much here. In this menu, touch and hold the touch sensor to turn on, and vice versa.
 
 The station will automatically go into deep sleep after 10 minutes(can be changed in the code), and it can also manually be turned off(goes to deep sleep, technically) by touching and holding the sensor(IN HOME SCREEN!!!) until the RGB turns red and the device goes to deep sleep. Can be woken up by tapping on the sensor.
+
+
+# Circuit diagram
+<img width="750" height="492" alt="circuit diagram" src="https://github.com/user-attachments/assets/63e5edaf-abf1-4f25-bc62-36640391eb91" />
+
+# Pinouts
+| Touch sensor | ESP32-S3 |
+| --- | --- |
+| VCC | 3V |
+| I/O | GPIO 5 |
+| GND | GND |
+
+Used a 1000mAh li-po battery with dimensions: 35x30x10mm, connected via PH2.0 compatible connector
+
+# BOM
+| Item | Link(aliexpress) |
+| --- | --- |
+| Touch sensor(TTP223) | https://ali.click/4cv6j1i |
+| Tenstar Robot TS-ESP32-S3| https://ali.click/gcv6j17 |
+| Battery 1000mAh | https://ali.click/ebv6j1w |
