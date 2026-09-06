@@ -11,11 +11,12 @@ There is a touch sensor, which when tapped on, switches between three menus: hom
 
 ## Home screen
 In this menu, you will see "OUT:..." and "IN:..." at the top. They display outdoors and indoors temperature(Indoors temperature may vary from the actual temp because the sensor is stupidly located near the MCU itself, which gets really hot and alters the readings. So there is an offset you can change in the code, the default is 26.5C). The outdoors temperature is only displayed if you put your Open Weather Map API key in the code.
+(FYI the temp readings are from the onboard BMP280)
 There is also a clock in the center. You have to set the timezone offsets for your specific region in the code(you can talk to your AI assistant if you don't know what to do)
 There is a battery indicator on top of the clock, displays the battery charge percentage(may vary)
-And there are barometric pressure readings at the bottom left, displayed in hectopascals. There is an estimated altitude too, at the bottom right(based on pressure readings)
+And there are barometric pressure readings at the bottom left, displayed in hectopascals(readings are from BMP280). There is an estimated altitude too, at the bottom right(based on pressure readings)
 
-## AP setup
+## WiFi setup
 In this menu, you will see the connection status(Connected or Disconnected). If connected, you will see the SSID of the AP, the IP and Signal(formally RSSI) strength in dBm.
 If you want to connect to your Wi-Fi AP, you touch and hold the touch sensor, until the RGB light turns blue, and the screen displays instructions(Connect to "WeatherStation-AP", open "192.168.4.1" in your browser, and set things up there. Used "WiFiManager" library by tzapu). If you wish to exit the AP setup mode, you can either tap on the touch sensor again, or exit from the web portal itself.
 
