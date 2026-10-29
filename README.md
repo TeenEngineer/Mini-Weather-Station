@@ -39,8 +39,8 @@ The station will automatically go into deep sleep after 10 minutes(can be change
 Used a 1000mAh li-po battery with dimensions: 35x30x10mm, connected via PH2.0 compatible connector
 
 # BOM
-| Item | Link(aliexpress) |
-| --- | --- |
-| Touch sensor(TTP223) | https://ali.click/4cv6j1i |
-| Tenstar Robot TS-ESP32-S3| https://ali.click/gcv6j17 |
-| Battery 1000mAh | https://ali.click/ebv6j1w |
+| Item | Qty | Price | Link(aliexpress) |
+| --- | --- | --- | --- |
+| Touch sensor(TTP223) | 1 | ≈$0.8 | https://ali.click/4cv6j1i |
+| Tenstar Robot TS-ESP32-S3| 1 | ≈$8.5 | https://ali.click/gcv6j17 |
+| Battery 1000mAh | 1 | ≈$5 | https://ali.click/ebv6j1w |
